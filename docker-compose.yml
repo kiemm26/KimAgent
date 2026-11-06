@@ -1,0 +1,100 @@
+services:
+  # ================================================================
+  # WAHA — WhatsApp HTTP API Gateway
+  # ================================================================
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: kim-waha
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - WHATSAPP_DEFAULT_ENGINE=WEBJS
+      - WAHA_LOG_LEVEL=info
+      - WHATSAPP_HOOK_EVENTS=message,session.status
+      - WHATSAPP_HOOK_URL=${WAHA_WEBHOOK_URL:-http://kim-core:4000/api/webhook}
+    volumes:
+      - ./data/waha:/app/.waha/sessions
+    networks:
+      - kim-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ================================================================
+  # KIM-CORE — Node.js TypeScript Main Engine
+  # ================================================================
+  kim-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: kim-core
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - WAHA_BASE_URL=http://waha:3000
+      - PYTHON_RUNNER_URL=http://python-runner:8000
+      - DB_PATH=/app/data/db/kim.db
+    volumes:
+      - ./data/db:/app/data/db
+      - ./data/media:/app/data/media
+      - ./data/backups:/app/data/backups
+      - ./skills:/app/skills
+      - ./config:/app/config:ro
+    networks:
+      - kim-net
+    depends_on:
+      waha:
+        condition: service_healthy
+      python-runner:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ================================================================
+  # PYTHON-RUNNER — Isolated Compute Sandbox
+  # ================================================================
+  python-runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    container_name: kim-python-runner
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - RUNNER_SECRET=${PYTHON_RUNNER_SECRET:-changeme}
+      - MAX_EXEC_TIMEOUT=10
+    volumes:
+      - /tmp/kim-sandbox:/tmp/sandbox
+    networks:
+      - kim-net
+    mem_limit: 2g
+    cpus: "1.0"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  kim-net:
+    driver: bridge
+    name: kim-network
+
+volumes:
+  waha-sessions:
+    driver: local

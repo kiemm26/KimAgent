@@ -1,0 +1,34 @@
+{
+  "app": {
+    "name": "kim-agent",
+    "version": "1.0.0",
+    "timezone": "Asia/Jakarta"
+  },
+  "debouncer": {
+    "windowMs": 1000,
+    "maxMessages": 10
+  },
+  "react": {
+    "maxSteps": 5,
+    "contextWindowTokens": 30000,
+    "typingDelayMs": {
+      "min": 300,
+      "max": 800
+    }
+  },
+  "llm": {
+    "retryOnRateLimit": true,
+    "cooldownMs": 60000,
+    "requestTimeoutMs": 30000,
+    "maxRetries": 3
+  },
+  "crystallization": {
+    "enabled": true,
+    "minSteps": 2
+  },
+  "scheduler": {
+    "reminderCheckCron": "* * * * *",
+    "walCheckpointCron": "0 */6 * * *",
+    "dbBackupCron": "0 2 * * *"
+  }
+}
