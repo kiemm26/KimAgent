@@ -1,7 +1,9 @@
 // src/config.ts
 // Centralized config loader — reads .env + config/default.json
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ override: true });
 import { readFileSync } from "fs";
+
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 

@@ -140,7 +140,7 @@ export class WahaClient {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      const res = await this.http.get("/api/health");
+      const res = await this.http.get("/api/server/status");
       return res.status === 200;
     } catch {
       return false;

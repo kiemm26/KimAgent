@@ -45,4 +45,5 @@ USER kimapp
 EXPOSE 4000
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/bundle.mjs"]
+

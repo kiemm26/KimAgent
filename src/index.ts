@@ -1,8 +1,10 @@
 // src/index.ts
 // KIM-AGENT — Application Entrypoint
 // Handles startup, graceful shutdown (SIGTERM/SIGINT), and InstaBox resilience
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ override: true });
 import { logger } from "./logger.js";
+
 import { getDb } from "./db/sqlite.js";
 import { startServer } from "./server.js";
 import { startScheduler } from "./scheduler.js";
@@ -16,7 +18,7 @@ async function main(): Promise<void> {
 
   // ── 1. Initialize Database ──────────────────────────────────────
   logger.info("Initializing SQLite database (WAL mode)...");
-  getDb(); // triggers schema creation
+  getDb();
   logger.info("✅ Database ready");
 
   // ── 2. Initialize LLM Rotator ───────────────────────────────────
@@ -55,6 +57,8 @@ async function main(): Promise<void> {
   logger.info("✅ HTTP server listening");
 
   logger.info("🎉 KIM-AGENT fully started. Waiting for WhatsApp messages...");
+
+
 
   // ── 6. Graceful Shutdown ─────────────────────────────────────────
   const gracefulShutdown = async (signal: string) => {

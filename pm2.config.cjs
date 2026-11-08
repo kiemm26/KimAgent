@@ -4,7 +4,7 @@ module.exports = {
   apps: [
     {
       name: "kim-agent",
-      script: "./dist/index.js",
+      script: "./dist/bundle.mjs",
       interpreter: "node",
       instances: 1,
       exec_mode: "fork",

@@ -11,29 +11,50 @@ import type { DebouncedMessage, ChatMessage, ReActResult } from "../types.js";
 
 const MAX_HISTORY = 20;
 
+function extractDigits(str: string): string {
+  return str.replace(/[^0-9]/g, "");
+}
+
 export async function routeMessage(msg: DebouncedMessage): Promise<void> {
   const { jid, mergedText } = msg;
   const waha = getWahaClient();
 
-  // Security: only process messages from OWNER_JID
-  if (env.OWNER_JID && jid !== env.OWNER_JID) {
-    logger.warn({ jid }, "Ignoring message from non-owner JID");
-    return;
+  console.log(`\n🤖 [ROUTER] Processing message from: ${jid} | "${mergedText}"`);
+
+  // Security: only process messages from OWNER_JID if configured
+  const configuredOwner = (process.env["OWNER_JID"] ?? env.OWNER_JID ?? "").trim();
+  const allowAll = !configuredOwner || configuredOwner === "*" || configuredOwner.toLowerCase() === "all";
+
+  if (!allowAll) {
+    const ownerDigits = extractDigits(configuredOwner);
+    const senderDigits = extractDigits(jid);
+
+    if (ownerDigits && senderDigits !== ownerDigits) {
+      console.log(`⚠️  [ROUTER BLOCKED] Sender digits (${senderDigits}) do not match OWNER_JID digits (${ownerDigits})!`);
+      logger.warn(
+        { senderJid: jid, senderDigits, configuredOwner, ownerDigits },
+        "Ignoring message from non-owner. Set OWNER_JID=* in .env to allow all."
+      );
+      return;
+    }
   }
+
 
   if (!mergedText.trim()) {
     logger.debug({ jid }, "Skipping empty merged message");
     return;
   }
 
-  logger.info({ jid, preview: mergedText.slice(0, 80) }, "Routing message");
+  logger.info({ jid, preview: mergedText.slice(0, 80) }, "Routing message to execution");
 
   // ── Path 1: Deterministic Fast Command ──────────────────────────
   const cmdResult = await handleCommand(mergedText, jid);
   if (cmdResult.handled && cmdResult.response) {
+    console.log(`⚡ [FAST CMD RESPONSE] to: ${jid}\n${cmdResult.response}`);
     await waha.sendWithTypingEffect(jid, cmdResult.response);
     return;
   }
+
 
   // ── Path 2: ReAct LLM Agent ─────────────────────────────────────
   // Load conversation history
