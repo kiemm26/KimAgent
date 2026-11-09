@@ -4,33 +4,43 @@ Isolated Python execution sandbox with timeout & output capture
 """
 import sys
 import io
-import signal
+import threading
 import traceback
 from contextlib import redirect_stdout, redirect_stderr
 
+# Allowlist of safe modules
+ALLOWED_MODULES = {
+    "pandas", "pd", "numpy", "np", "matplotlib", "matplotlib.pyplot",
+    "json", "math", "statistics", "datetime", "collections", "itertools",
+    "re", "string", "decimal", "fractions", "random", "time",
+    "io", "csv", "base64", "hashlib", "uuid",
+    "pypdf", "pdfplumber", "PIL", "pillow",
+}
 
-class TimeoutException(Exception):
-    pass
 
-
-def timeout_handler(signum: int, frame: object) -> None:  # type: ignore[type-arg]
-    raise TimeoutException("Execution timed out")
+def _safe_import(name: str, *args, **kwargs):
+    top_level = name.split(".")[0]
+    if top_level not in ALLOWED_MODULES and name not in ALLOWED_MODULES:
+        raise ImportError(f"Module '{name}' is not allowed in the sandbox")
+    return __import__(name, *args, **kwargs)
 
 
 def execute_code(code: str, timeout_seconds: int = 8) -> dict:
     """
-    Execute Python code in a sandboxed environment.
-    Returns dict with stdout, stderr, error, and success fields.
+    Execute Python code in a sandboxed environment using thread timeout.
+    Safe for FastAPI threadpool execution (avoids SIGALRM in non-main threads).
     """
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
+    result = {
+        "success": False,
+        "stdout": "",
+        "stderr": "",
+        "error": None,
+    }
 
-    # Set timeout via SIGALRM (Unix only)
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(timeout_seconds)
-
-    # Restricted globals — block dangerous builtins
-    restricted_globals: dict = {
+    # Restricted environment
+    sandbox_env: dict = {
         "__builtins__": {
             "print": print,
             "len": len,
@@ -64,49 +74,32 @@ def execute_code(code: str, timeout_seconds: int = 8) -> dict:
         }
     }
 
-    local_vars: dict = {}
+    def worker():
+        try:
+            with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+                # Use same dictionary for globals and locals so imports/functions resolve properly
+                exec(compile(code, "<kim-sandbox>", "exec"), sandbox_env, sandbox_env)
+            result["success"] = True
+            result["stdout"] = stdout_buf.getvalue()
+            result["stderr"] = stderr_buf.getvalue()
+            result["error"] = None
+        except Exception:
+            result["success"] = False
+            result["stdout"] = stdout_buf.getvalue()
+            result["stderr"] = stderr_buf.getvalue()
+            result["error"] = traceback.format_exc()
 
-    try:
-        with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
-            exec(compile(code, "<kim-sandbox>", "exec"), restricted_globals, local_vars)
-        signal.alarm(0)  # Cancel alarm
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    t.join(timeout=timeout_seconds)
 
-        return {
-            "success": True,
-            "stdout": stdout_buf.getvalue(),
-            "stderr": stderr_buf.getvalue(),
-            "error": None,
-        }
-    except TimeoutException:
-        signal.alarm(0)
+    if t.is_alive():
         return {
             "success": False,
             "stdout": stdout_buf.getvalue(),
             "stderr": "",
             "error": f"Execution timed out after {timeout_seconds} seconds",
         }
-    except Exception:
-        signal.alarm(0)
-        return {
-            "success": False,
-            "stdout": stdout_buf.getvalue(),
-            "stderr": stderr_buf.getvalue(),
-            "error": traceback.format_exc(),
-        }
 
+    return result
 
-# Allowlist of safe modules
-ALLOWED_MODULES = {
-    "pandas", "pd", "numpy", "np", "matplotlib", "matplotlib.pyplot",
-    "json", "math", "statistics", "datetime", "collections", "itertools",
-    "re", "string", "decimal", "fractions", "random", "time",
-    "io", "csv", "base64", "hashlib", "uuid",
-    "pypdf", "pdfplumber", "PIL", "pillow",
-}
-
-
-def _safe_import(name: str, *args, **kwargs):
-    top_level = name.split(".")[0]
-    if top_level not in ALLOWED_MODULES and name not in ALLOWED_MODULES:
-        raise ImportError(f"Module '{name}' is not allowed in the sandbox")
-    return __import__(name, *args, **kwargs)
