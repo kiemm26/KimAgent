@@ -52,13 +52,23 @@ export async function runReActLoop(
     usedKey = keyEntry.key;
     usedModel = keyEntry.model;
 
+    const isFinalStep = step === maxSteps - 1;
+    // On the final step, remove tools to force a final text answer
+    const currentTools = isFinalStep ? [] : tools;
+    if (isFinalStep && steps.length > 0) {
+      messages.push({
+        role: "user",
+        content: "Sajikan kesimpulan dan jawaban final terbaik berdasarkan semua data yang sudah kamu kumpulkan di atas secara lengkap dan rapi.",
+      });
+    }
+
     try {
       let response: { content: string; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; tokensUsed: number; finishReason: string };
 
       if (keyEntry.provider === "gemini") {
-        response = await callGemini({ apiKey: keyEntry.key, model: keyEntry.model, systemPrompt, messages, tools });
+        response = await callGemini({ apiKey: keyEntry.key, model: keyEntry.model, systemPrompt, messages, tools: currentTools });
       } else {
-        response = await callOpenRouter({ apiKey: keyEntry.key, model: keyEntry.model, systemPrompt, messages, tools });
+        response = await callOpenRouter({ apiKey: keyEntry.key, model: keyEntry.model, systemPrompt, messages, tools: currentTools });
       }
 
       totalTokens += response.tokensUsed;
@@ -133,11 +143,18 @@ export async function runReActLoop(
     }
   }
 
-  logger.warn({ jid, maxSteps }, "ReAct: max steps reached, returning partial answer");
+  logger.warn({ jid, maxSteps }, "ReAct: max steps reached, returning aggregated observations");
+  const observations = steps
+    .filter((s) => s.observation?.content)
+    .map((s) => s.observation!.content)
+    .join("\n\n");
+
   return {
-    answer: `⚠️ Respon membutuhkan lebih dari ${maxSteps} langkah. Berikut hasil yang sudah terkumpul:\n\n` +
-      steps.map((s, i) => `Step ${i + 1}: ${s.observation?.content ?? s.thought}`).join("\n"),
-    steps, tokensUsed: totalTokens, keyUsed: usedKey, model: usedModel,
+    answer: observations || "Permintaan telah diproses, namun tidak ada ringkasan teks yang dihasilkan.",
+    steps,
+    tokensUsed: totalTokens,
+    keyUsed: usedKey,
+    model: usedModel,
   };
 }
 

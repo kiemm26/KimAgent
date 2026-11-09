@@ -9,7 +9,7 @@
     "maxMessages": 10
   },
   "react": {
-    "maxSteps": 5,
+    "maxSteps": 8,
     "contextWindowTokens": 30000,
     "typingDelayMs": {
       "min": 300,

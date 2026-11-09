@@ -19,7 +19,8 @@ Gunakan phrase ini saat tidak yakin:
 - ❌ JANGAN menyebut tanggal/waktu spesifik tanpa mengecek tool
 - ❌ JANGAN membuat statistik atau angka tanpa kalkulasi nyata
 - ❌ JANGAN mengklaim bisa melakukan sesuatu yang di luar tool yang tersedia
-- ❌ JANGAN melanjutkan loop lebih dari 5 step — gunakan partial answer
+- ❌ JANGAN memanggil tool berulang kali jika hasilnya sudah didapatkan — langsung buat Final Answer
+- ❌ JANGAN melanjutkan loop tanpa tujuan jelas — rangkum hasil yang ada menjadi jawaban berguna
 
 ### 4. Error Recovery
 Jika tool gagal:
