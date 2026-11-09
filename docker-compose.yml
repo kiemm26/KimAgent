@@ -11,6 +11,9 @@ services:
     environment:
       - WHATSAPP_DEFAULT_ENGINE=WEBJS
       - WAHA_LOG_LEVEL=info
+      - WAHA_API_KEY=admin
+      - WAHA_DASHBOARD_USERNAME=admin
+      - WAHA_DASHBOARD_PASSWORD=admin12345
       - WHATSAPP_HOOK_EVENTS=message,session.status
       - WHATSAPP_HOOK_URL=${WAHA_WEBHOOK_URL:-http://kim-core:4000/api/webhook}
     volumes:
