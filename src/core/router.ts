@@ -70,8 +70,22 @@ export async function routeMessage(msg: DebouncedMessage): Promise<void> {
     await waha.stopTyping({ chatId: jid });
   }
 
-  // Send the answer
-  await waha.sendText({ chatId: jid, text: result.answer });
+  // Send the answer (support embedded chart images from python_execute/render_chart)
+  const imageMatch = result.answer.match(/\[IMAGE:base64:([A-Za-z0-9+/=]+)\]/);
+  if (imageMatch && imageMatch[1]) {
+    const base64Data = imageMatch[1];
+    const cleanText = result.answer.replace(/\[IMAGE:base64:[A-Za-z0-9+/=]+\]/g, "").trim();
+    await waha.sendImage({
+      chatId: jid,
+      file: {
+        data: base64Data,
+        mimetype: "image/png",
+      },
+      caption: cleanText || undefined,
+    });
+  } else {
+    await waha.sendText({ chatId: jid, text: result.answer });
+  }
 
   // Persist conversation turn to DB
   persistMessages(jid, mergedText, result.answer);

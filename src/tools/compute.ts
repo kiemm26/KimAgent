@@ -24,6 +24,15 @@ async function callRunner(endpoint: string, body: Record<string, unknown>): Prom
     throw err;
   }
 }
+export async function checkRunnerHealth(): Promise<boolean> {
+  try {
+    const res = await axios.get(`${env.PYTHON_RUNNER_URL}/health`, { timeout: 3000 });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
+
 
 export const computeToolDefinitions: ToolDefinition[] = [
   {

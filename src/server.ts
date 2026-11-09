@@ -7,6 +7,8 @@ import { BurstDebouncer } from "./gateway/debouncer.js";
 import { routeMessage } from "./core/router.js";
 import { getDb, closeDb, walCheckpoint } from "./db/sqlite.js";
 import { getWahaClient } from "./gateway/waha.js";
+import { checkRunnerHealth } from "./tools/compute.js";
+
 import type { WahaWebhookPayload, WahaMessagePayload } from "./types.js";
 
 // Initialize debouncer — routes flushed messages to the main router
@@ -78,7 +80,10 @@ export function buildServer(): { server: Server; debouncer: BurstDebouncer } {
       // ── Health check endpoint ─────────────────────────────────────
       if (pathname === "/api/health" && method === "GET") {
         const waha = getWahaClient();
-        const wahaOk = await waha.healthCheck();
+        const [wahaOk, runnerOk] = await Promise.all([
+          waha.healthCheck(),
+          checkRunnerHealth(),
+        ]);
         let dbOk = false;
         try { getDb(); dbOk = true; } catch { dbOk = false; }
 
@@ -87,6 +92,7 @@ export function buildServer(): { server: Server; debouncer: BurstDebouncer } {
           services: {
             waha: wahaOk ? "up" : "down",
             db: dbOk ? "up" : "down",
+            pythonRunner: runnerOk ? "up" : "down",
           },
           uptime: process.uptime(),
           memoryMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),

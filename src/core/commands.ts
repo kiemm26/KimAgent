@@ -3,6 +3,7 @@ import { dbQuery, dbRun, walCheckpoint } from "../db/sqlite.js";
 import { getRotator } from "../llm/rotator.js";
 import { getWahaClient } from "../gateway/waha.js";
 import { env } from "../config.js";
+import { checkRunnerHealth } from "../tools/compute.js";
 import { logger } from "../logger.js";
 import type { TodoRow, ReminderRow } from "../types.js";
 
@@ -18,7 +19,7 @@ export async function handleCommand(text: string, jid: string): Promise<CommandR
   switch (cmd) {
     case "ping": return { handled: true, response: cmdPing() };
     case "help": return { handled: true, response: cmdHelp() };
-    case "health": return { handled: true, response: cmdHealth() };
+    case "health": return { handled: true, response: await cmdHealth() };
     case "todo": return { handled: true, response: cmdTodoList(jid, args) };
     case "add": return { handled: true, response: cmdTodoAdd(jid, args) };
     case "done": return { handled: true, response: cmdTodoDone(jid, args) };
@@ -40,13 +41,14 @@ function cmdHelp(): string {
   return "KIM Commands:\n#ping #health #waha\n#todo [status] #add [task] #done [id]\n#reminders #skills #clear #checkpoint\nAI Mode: Kirim pesan biasa";
 }
 
-function cmdHealth(): string {
+async function cmdHealth(): Promise<string> {
   const r = getRotator().getHealthReport();
   const mb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+  const runnerOk = await checkRunnerHealth();
   const kl = r.keys.map((k: { healthy: boolean; provider: string; requestCount: number; errorCount: number }, i: number) =>
     "  " + (k.healthy ? "healthy" : "cooldown") + " Key" + (i+1) + "(" + k.provider + ") " + k.requestCount + "req/" + k.errorCount + "err"
   ).join("\n");
-  return "Health: " + mb + "MB, Keys(" + r.healthy + "/" + r.total + "):\n" + kl;
+  return "Health: " + mb + "MB | Runner: " + (runnerOk ? "Online ✅" : "Offline ❌") + "\nKeys(" + r.healthy + "/" + r.total + "):\n" + kl;
 }
 
 function cmdTodoList(jid: string, args: string): string {
