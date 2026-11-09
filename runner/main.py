@@ -14,7 +14,7 @@ from sandbox import execute_code
 
 app = FastAPI(title="kim-python-runner", version="1.0.0")
 
-RUNNER_SECRET = os.environ.get("RUNNER_SECRET", "")
+RUNNER_SECRET = os.environ.get("PYTHON_RUNNER_SECRET") or os.environ.get("RUNNER_SECRET", "")
 MAX_TIMEOUT = int(os.environ.get("MAX_EXEC_TIMEOUT", "10"))
 SANDBOX_DIR = Path("/tmp/sandbox")
 SANDBOX_DIR.mkdir(parents=True, exist_ok=True)
