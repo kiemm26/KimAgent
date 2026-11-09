@@ -17,7 +17,7 @@ services:
       - WHATSAPP_HOOK_EVENTS=message,session.status
       - WHATSAPP_HOOK_URL=${WAHA_WEBHOOK_URL:-http://kim-core:4000/api/webhook}
     volumes:
-      - ./data/waha:/app/.waha/sessions
+      - ./data/waha:/app/.sessions
     networks:
       - kim-net
     healthcheck:
