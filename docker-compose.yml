@@ -21,11 +21,11 @@ services:
     networks:
       - kim-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ping || curl -f http://localhost:3000/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ================================================================
   # KIM-CORE — Node.js TypeScript Main Engine
