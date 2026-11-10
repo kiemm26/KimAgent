@@ -45,10 +45,10 @@ async function cmdHealth(): Promise<string> {
   const r = getRotator().getHealthReport();
   const mb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
   const runnerOk = await checkRunnerHealth();
-  const kl = r.keys.map((k: { healthy: boolean; provider: string; requestCount: number; errorCount: number }, i: number) =>
-    "  " + (k.healthy ? "healthy" : "cooldown") + " Key" + (i+1) + "(" + k.provider + ") " + k.requestCount + "req/" + k.errorCount + "err"
+  const kl = r.keys.map((k: { healthy: boolean; provider: string; model: string; requestCount: number; errorCount: number }, i: number) =>
+    "  " + (k.healthy ? "healthy" : "cooldown") + " Slot" + (i+1) + "[" + k.model + "] " + k.requestCount + "req/" + k.errorCount + "err"
   ).join("\n");
-  return "Health: " + mb + "MB | Runner: " + (runnerOk ? "Online ✅" : "Offline ❌") + "\nKeys(" + r.healthy + "/" + r.total + "):\n" + kl;
+  return "Health: " + mb + "MB | Runner: " + (runnerOk ? "Online ✅" : "Offline ❌") + "\nModel Slots(" + r.healthy + "/" + r.total + "):\n" + kl;
 }
 
 function cmdTodoList(jid: string, args: string): string {

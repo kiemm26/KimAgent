@@ -72,7 +72,7 @@ export async function runReActLoop(
       }
 
       totalTokens += response.tokensUsed;
-      getRotator().markSuccess(keyEntry.key);
+      getRotator().markSuccess(keyEntry.key, keyEntry.model);
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
         logger.info({ jid, step, totalTokens }, "ReAct: final answer reached");
@@ -92,16 +92,46 @@ export async function runReActLoop(
       messages.push({ role: "tool", content: toolResults.join("\n\n") });
 
     } catch (err: unknown) {
-      const error = err as { response?: { status?: number; headers?: { "retry-after"?: string } }; message?: string };
-      const status = error.response?.status;
+      const error = err as {
+        status?: number;
+        statusCode?: number;
+        response?: { status?: number; headers?: { "retry-after"?: string } };
+        message?: string;
+      };
 
-      // 429 Rate Limited: cooldown & rotate
+      // Extract HTTP status from axios response or parse GoogleGenerativeAI Error message string
+      const rawMsg = error.message ?? "";
+      let status: number | undefined = error.status ?? error.statusCode ?? error.response?.status;
+
+      if (!status) {
+        if (
+          rawMsg.includes("429") ||
+          rawMsg.toLowerCase().includes("resource has been exhausted") ||
+          rawMsg.toLowerCase().includes("quota")
+        ) {
+          status = HTTP_429;
+        } else if (rawMsg.includes("401") || rawMsg.includes("403") || rawMsg.toLowerCase().includes("api_key_invalid")) {
+          status = HTTP_401;
+        } else if (rawMsg.includes("404") || rawMsg.toLowerCase().includes("not found")) {
+          status = HTTP_404;
+        } else if (rawMsg.includes("503") || rawMsg.toLowerCase().includes("high demand") || rawMsg.toLowerCase().includes("service unavailable")) {
+          status = HTTP_503;
+        }
+      }
+
+      // 429 Rate Limited / Quota Exhausted: cooldown & rotate to next key or model
       if (status === HTTP_429) {
         const retryAfterSec = parseInt(error.response?.headers?.["retry-after"] ?? "60", 10);
-        getRotator().markRateLimited(keyEntry.key, retryAfterSec * 1000);
-        logger.warn({ jid, step, retryAfterSec }, "ReAct: 429 rate limit, rotating key");
-        step--;
-        continue;
+        getRotator().markRateLimited(keyEntry.key, keyEntry.model, retryAfterSec * 1000);
+        logger.warn({ jid, step, model: keyEntry.model, retryAfterSec }, "ReAct: 429 rate limit/quota, rotating key/model");
+        if (step < MAX_KEY_RETRIES) {
+          step--;
+          continue;
+        }
+        return {
+          answer: "⚠️ Kuota API key / model saat ini sedang penuh. Mohon coba lagi beberapa saat lagi.",
+          steps, tokensUsed: totalTokens, keyUsed: usedKey, model: usedModel,
+        };
       }
 
       // 401/403 Unauthorized: blacklist & rotate
@@ -115,26 +145,26 @@ export async function runReActLoop(
         };
       }
 
-      // 404 Model Not Found: blacklist & rotate
+      // 404 Model Not Found: blacklist this model for this key & rotate
       if (status === HTTP_404) {
-        getRotator().markUnauthorized(keyEntry.key);
-        logger.warn({ jid, step, status, model: keyEntry.model }, "ReAct: 404 model not found, rotating key");
+        getRotator().markRateLimited(keyEntry.key, keyEntry.model, 86_400_000); // 24hr cooldown for non-existent model
+        logger.warn({ jid, step, status, model: keyEntry.model }, "ReAct: 404 model not found, rotating to alternative model");
         if (step < MAX_KEY_RETRIES) { step--; continue; }
         return {
-          answer: `⚠️ Model *${keyEntry.model}* tidak tersedia. Mohon periksa konfigurasi GEMINI_MODEL di .env.`,
+          answer: `⚠️ Model *${keyEntry.model}* tidak tersedia. Sistem sedang mencoba beralih ke model lain.`,
           steps, tokensUsed: totalTokens, keyUsed: usedKey, model: usedModel,
         };
       }
 
-      // 503 Service Unavailable: short cooldown & rotate
+      // 503 Service Unavailable / High Demand: short cooldown & rotate
       if (status === HTTP_503) {
-        getRotator().markError(keyEntry.key);
-        logger.warn({ jid, step }, "ReAct: 503 unavailable, retrying with different key");
+        getRotator().markError(keyEntry.key, keyEntry.model);
+        logger.warn({ jid, step, model: keyEntry.model }, "ReAct: 503 unavailable / high demand, rotating model/key");
         if (step < MAX_KEY_RETRIES) { step--; continue; }
       }
 
       // Other errors: log & fail
-      getRotator().markError(keyEntry.key);
+      getRotator().markError(keyEntry.key, keyEntry.model);
       logger.error({ jid, step, status, err }, "ReAct: LLM call failed");
       return {
         answer: `❌ Terjadi kesalahan saat memproses: ${error.message ?? "Unknown error"}. Silakan coba lagi.`,

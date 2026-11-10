@@ -82,10 +82,18 @@ export const env = {
   // Owner
   OWNER_JID: process.env["OWNER_JID"] ?? "",
 
-  // LLM Keys (parse comma-separated list)
+  // LLM Keys & Models (parse comma-separated lists)
   GEMINI_KEYS: (process.env["GEMINI_KEYS"] ?? "").split(",").map((k) => k.trim()).filter(Boolean),
-  GEMINI_MODEL: process.env["GEMINI_MODEL"] ?? "gemini-2.5-flash-preview-05-20",
-  GEMINI_FALLBACK_MODEL: process.env["GEMINI_FALLBACK_MODEL"] ?? "gemini-1.5-flash",
+  GEMINI_MODELS: (
+    process.env["GEMINI_MODELS"] ??
+    process.env["GEMINI_MODEL"] ??
+    "gemini-3.5-flash,gemini-3-flash-preview,gemini-2.5-flash"
+  )
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean),
+  GEMINI_MODEL: process.env["GEMINI_MODEL"] ?? "gemini-3.5-flash",
+  GEMINI_FALLBACK_MODEL: process.env["GEMINI_FALLBACK_MODEL"] ?? "gemini-3-flash-preview",
 
   OPENROUTER_API_KEY: process.env["OPENROUTER_API_KEY"] ?? "",
   OPENROUTER_MODEL: process.env["OPENROUTER_MODEL"] ?? "google/gemini-flash-1.5",

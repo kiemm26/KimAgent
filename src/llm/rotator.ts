@@ -31,21 +31,27 @@ export class LLMRotator {
   }
 
   private initializeKeys(): void {
+    // Add Gemini primary keys across all configured models
+    const models = env.GEMINI_MODELS.length > 0 ? env.GEMINI_MODELS : [env.GEMINI_MODEL];
+
     for (const rawKey of env.GEMINI_KEYS) {
       const key = rawKey.trim();
       if (isPlaceholderKey(key)) {
         logger.warn({ keyPreview: key.slice(0, 10) }, "LLMRotator: skipping placeholder/empty Gemini key");
         continue;
       }
-      this.primaryKeys.push({
-        key,
-        provider: "gemini",
-        model: env.GEMINI_MODEL,
-        cooldownUntil: 0,
-        requestCount: 0,
-        errorCount: 0,
-        lastUsedAt: 0,
-      });
+
+      for (const model of models) {
+        this.primaryKeys.push({
+          key,
+          provider: "gemini",
+          model,
+          cooldownUntil: 0,
+          requestCount: 0,
+          errorCount: 0,
+          lastUsedAt: 0,
+        });
+      }
     }
 
     const orKey = env.OPENROUTER_API_KEY?.trim();
@@ -67,7 +73,12 @@ export class LLMRotator {
     }
 
     logger.info(
-      { total, gemini: this.primaryKeys.length, openrouter: this.fallbackKeys.length },
+      {
+        total,
+        geminiSlots: this.primaryKeys.length,
+        models,
+        openrouter: this.fallbackKeys.length,
+      },
       "LLMRotator: key pool initialized"
     );
   }
@@ -118,11 +129,11 @@ export class LLMRotator {
   }
 
   /**
-   * Mark a key as rate-limited (HTTP 429) — apply configured cooldown.
+   * Mark a key-model pair as rate-limited (HTTP 429) — apply configured cooldown.
    */
-  markRateLimited(key: string, retryAfterMs?: number): void {
+  markRateLimited(key: string, model?: string, retryAfterMs?: number): void {
     const cfg = getConfig();
-    const entry = this.findEntry(key);
+    const entry = this.findEntry(key, model);
     if (!entry) return;
 
     const cooldownMs = retryAfterMs ?? cfg.llm.cooldownMs;
@@ -136,44 +147,48 @@ export class LLMRotator {
   }
 
   /**
-   * Mark a key as temporarily errored (non-429, non-401 — short cooldown).
+   * Mark a key-model pair as temporarily errored (non-429, non-401 — short cooldown).
    */
-  markError(key: string): void {
-    const entry = this.findEntry(key);
+  markError(key: string, model?: string): void {
+    const entry = this.findEntry(key, model);
     if (!entry) return;
 
     entry.cooldownUntil = Date.now() + 15_000; // 15s cooldown for transient errors
     entry.errorCount++;
 
     logger.warn(
-      { provider: entry.provider, errorCount: entry.errorCount },
+      { provider: entry.provider, model: entry.model, errorCount: entry.errorCount },
       "LLMRotator: key marked as errored (15s cooldown)"
     );
   }
 
   /**
-   * Permanently blacklist a key this session (HTTP 401 Unauthorized).
+   * Permanently blacklist a key across all models (HTTP 401 Unauthorized).
    * Sets cooldown to far future so it's never selected again.
    */
   markUnauthorized(key: string): void {
-    const entry = this.findEntry(key);
-    if (!entry) return;
+    // Blacklist all entries with this key
+    const allMatches = [
+      ...this.primaryKeys.filter((k) => k.key === key),
+      ...this.fallbackKeys.filter((k) => k.key === key),
+    ];
 
-    // Effectively blacklist: cooldown until year 2099
-    entry.cooldownUntil = Date.now() + 999_999_999_999;
-    entry.errorCount++;
+    for (const entry of allMatches) {
+      entry.cooldownUntil = Date.now() + 999_999_999_999;
+      entry.errorCount++;
+    }
 
     logger.error(
-      { provider: entry.provider, model: entry.model },
-      "LLMRotator: key BLACKLISTED (401 Unauthorized) — will not be retried this session"
+      { keyPreview: key.slice(0, 10), count: allMatches.length },
+      "LLMRotator: key BLACKLISTED across all models (401 Unauthorized)"
     );
   }
 
   /**
-   * Reset a key back to healthy state (called on successful response).
+   * Reset a key-model pair back to healthy state (called on successful response).
    */
-  markSuccess(key: string): void {
-    const entry = this.findEntry(key);
+  markSuccess(key: string, model?: string): void {
+    const entry = this.findEntry(key, model);
     if (!entry) return;
     entry.cooldownUntil = 0;
   }
@@ -224,7 +239,13 @@ export class LLMRotator {
     return null;
   }
 
-  private findEntry(key: string): ApiKeyEntry | undefined {
+  private findEntry(key: string, model?: string): ApiKeyEntry | undefined {
+    if (model) {
+      const match =
+        this.primaryKeys.find((k) => k.key === key && k.model === model) ??
+        this.fallbackKeys.find((k) => k.key === key && k.model === model);
+      if (match) return match;
+    }
     return (
       this.primaryKeys.find((k) => k.key === key) ??
       this.fallbackKeys.find((k) => k.key === key)
