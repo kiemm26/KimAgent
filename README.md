@@ -250,6 +250,6 @@ Proyek ini dilisensikan di bawah lisensi [MIT](LICENSE). Bebas digunakan dan dim
 ---
 
 <div align="center">
-Dibuat dengan ❤️ oleh <b>Muhammad Hamdi</b>
+Dibuat oleh <b>Muhammad Hamdi Hakim</b>
 </div>
 
